@@ -1,0 +1,170 @@
+package com.example.souza.mutantes;
+
+import android.app.Activity;
+import android.content.DialogInterface;
+import android.content.Intent;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.net.Uri;
+import android.support.v7.app.AlertDialog;
+import android.support.v7.app.AppCompatActivity;
+import android.os.Bundle;
+import android.util.Base64;
+import android.view.View;
+import android.widget.EditText;
+import android.widget.ImageView;
+import android.widget.TextView;
+import android.widget.Toast;
+
+import com.android.volley.Request;
+import com.android.volley.RequestQueue;
+import com.android.volley.Response;
+import com.android.volley.VolleyError;
+
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import java.io.ByteArrayOutputStream;
+import java.io.FileNotFoundException;
+import java.util.List;
+
+import static com.example.souza.mutantes.AppConfig.URL_MUTANTES;
+
+public class CadastroActivity extends AppCompatActivity implements Response.Listener, Response.ErrorListener {
+
+    public static Uri imagemSelecionada;
+    public static String imgPath;
+    private RequestQueue mQueue;
+    ImageView imgView;
+    String base64Image;
+    public static final String REQUEST_TAG = "Registration";
+
+    private MutanteOperations mutanteDBOperations;
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_cadastro);
+        EditText habilidade = (EditText) findViewById(R.id.habilidade);
+        EditText nome = (EditText) findViewById(R.id.nome);
+        imgView = (ImageView)findViewById(R.id.imagem);
+        Intent it = getIntent();
+        Bundle params = it.getExtras();
+        int id = params.getInt("mutanteId");
+    }
+
+    public void addImagem(View view) {
+        Intent intent = new Intent(Intent.ACTION_PICK, android.provider.MediaStore.Images.Media.INTERNAL_CONTENT_URI);
+        startActivityForResult(Intent.createChooser(intent, "Selecione uma imagem"), 123);
+    }
+
+    @Override
+    public void onActivityResult(int requestCode, int resultCode, Intent data) {
+        if(resultCode == Activity.RESULT_OK){
+            if(requestCode == 123){
+                Uri imagemSelecionada = data.getData();
+                imgPath = imagemSelecionada.toString();
+                Bitmap bitmap;
+                try {
+                    bitmap = BitmapFactory.decodeStream(getContentResolver().openInputStream(imagemSelecionada));
+                    imgView.setImageBitmap(bitmap);
+                    base64Image = getEncoded64ImageStringFromBitmap(bitmap);
+                } catch (FileNotFoundException e) {
+                    // TODO Auto-generated catch block
+                    e.printStackTrace();
+                }
+                Toast.makeText(getApplicationContext(), imagemSelecionada.toString(), Toast.LENGTH_SHORT).show();
+            }
+        }
+    }
+
+    public void finalizar(View view) {
+        EditText nome = (EditText) findViewById(R.id.nome);
+        EditText habilidade = (EditText) findViewById(R.id.habilidade);
+
+        try {
+            Intent it = getIntent();
+            Bundle params = it.getExtras();
+            int aux2 = params.getInt("aux");
+            int id = params.getInt("mutanteId");
+            String nomeUsuario = params.getString("nomeUsuario");
+
+            if (!(habilidade.getText().toString().equals("") || nome.getText().toString().equals("") || base64Image.equals(""))) {
+
+                    JSONObject jsonObject = new JSONObject();
+                    jsonObject.put("nome", String.valueOf(nome.getText().toString()));
+                    jsonObject.put("habilidade", String.valueOf(habilidade.getText().toString()));
+                    jsonObject.put("foto", base64Image);
+                    jsonObject.put("nomeUsuario", nomeUsuario);
+                    CustomJSONObjectRequest jsonRequest = new CustomJSONObjectRequest(Request.Method.POST, URL_MUTANTES, jsonObject, this, this);
+                if (aux2 == 1) {
+                    jsonRequest = new CustomJSONObjectRequest(Request.Method.PUT, URL_MUTANTES, jsonObject, this, this);
+                }
+                    jsonRequest.setTag(REQUEST_TAG);
+                    mQueue.add(jsonRequest);
+            }
+        } catch (Exception e) {
+            Toast.makeText(this, e.getMessage(), Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+        if(mQueue != null) {
+            mQueue.cancelAll(REQUEST_TAG);
+        }
+    }
+
+    @Override
+    public void onErrorResponse(VolleyError error) {
+        Toast.makeText(this, error.getMessage(), Toast.LENGTH_SHORT).show();
+    }
+
+    @Override
+    public void onResponse(Object response) {
+        AlertDialog alerta;
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        try {
+            if (((JSONObject) response).getInt("status") == 200){
+                builder.setMessage("Mutante cadastrado");
+                alerta = builder.create();
+                alerta.setOnDismissListener(new DialogInterface.OnDismissListener() {
+                    @Override
+                    public void onDismiss(DialogInterface dialog) {
+                        finish();
+                    }
+                });
+                alerta.show();
+            }
+            if (((JSONObject) response).getInt("status") == 500){
+                String e = "Nome desse mutante já foi cadastrado";
+                throw new Exception(e);
+            }
+        } catch (Exception e){
+            builder.setTitle("Um erro ocorreu");
+            builder.setMessage(e.getMessage());
+            alerta = builder.create();
+            alerta.show();
+        }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+    }
+
+    public String getEncoded64ImageStringFromBitmap(Bitmap bitmap) {
+        ByteArrayOutputStream stream = new ByteArrayOutputStream();
+        bitmap.compress(Bitmap.CompressFormat.JPEG, 70, stream);
+        byte[] byteFormat = stream.toByteArray();
+        // get the base 64 string
+        String imgString = Base64.encodeToString(byteFormat, Base64.NO_WRAP);
+        return imgString;
+    }
+}
